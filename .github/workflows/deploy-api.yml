@@ -1,0 +1,52 @@
+name: Deploy API to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+      - feat/api*
+
+env:
+  PROJECT_ID: suggestorder-dev
+  REGION: us-central1
+  REGISTRY: us-central1-docker.pkg.dev/suggestorder-dev/suggestorder
+
+jobs:
+  deploy:
+    name: Build and deploy API
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push
+        run: |
+          docker build \
+            -t ${{ env.REGISTRY }}/api:${{ github.sha }} \
+            apps/api
+          docker push ${{ env.REGISTRY }}/api:${{ github.sha }}
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy suggestorder-api \
+            --image=${{ env.REGISTRY }}/api:${{ github.sha }} \
+            --region=${{ env.REGION }} \
+            --platform=managed \
+            --allow-unauthenticated \
+            --set-secrets=DATABASE_URL=DATABASE_URL:latest,REDIS_URL=REDIS_URL:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,STORE_API_KEY=STORE_API_KEY:latest,SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest \
+            --set-env-vars=CORS_ORIGINS=${{ secrets.WEB_URL }} \
+            --project=${{ env.PROJECT_ID }}

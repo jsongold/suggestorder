@@ -1,0 +1,51 @@
+name: Deploy Web to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+      - feat/web*
+
+env:
+  PROJECT_ID: suggestorder-dev
+  REGION: us-central1
+  REGISTRY: us-central1-docker.pkg.dev/suggestorder-dev/suggestorder
+
+jobs:
+  deploy:
+    name: Build and deploy Web
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push
+        run: |
+          docker build \
+            -t ${{ env.REGISTRY }}/web:${{ github.sha }} \
+            --build-arg NEXT_PUBLIC_API_URL=${{ secrets.API_URL }} \
+            apps/web
+          docker push ${{ env.REGISTRY }}/web:${{ github.sha }}
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy suggestorder-web \
+            --image=${{ env.REGISTRY }}/web:${{ github.sha }} \
+            --region=${{ env.REGION }} \
+            --platform=managed \
+            --allow-unauthenticated \
+            --project=${{ env.PROJECT_ID }}
