@@ -1,0 +1,35 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: suggestorder
+      POSTGRES_PASSWORD: suggestorder
+      POSTGRES_DB: suggestorder
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build: ./apps/api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://suggestorder:suggestorder@db:5432/suggestorder
+      REDIS_URL: redis://redis:6379
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      STORE_API_KEY: ${STORE_API_KEY}
+    volumes:
+      - ./apps/api:/app
+    depends_on:
+      - db
+      - redis
+    command: uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  pgdata:
