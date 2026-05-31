@@ -1,0 +1,83 @@
+# Cloud Build — builds and deploys API + Web to Cloud Run
+#
+# First-time setup:
+#   1. Create Artifact Registry repo:
+#      gcloud artifacts repositories create suggestorder \
+#        --repository-format=docker --location=us-central1 \
+#        --project=suggestorder-dev
+#
+#   2. Add required secrets to Secret Manager (see Required secrets below).
+#
+#   3. Deploy API once manually to get its URL:
+#      gcloud run deploy suggestorder-api \
+#        --image=us-central1-docker.pkg.dev/suggestorder-dev/suggestorder/api:latest \
+#        --region=us-central1 --platform=managed --allow-unauthenticated \
+#        --project=suggestorder-dev
+#      Then set _API_URL in the Cloud Build trigger to the assigned URL.
+#
+# Required secrets in Secret Manager (exact names):
+#   DATABASE_URL, REDIS_URL, OPENAI_API_KEY, STORE_API_KEY,
+#   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET
+
+steps:
+  # ---------- API ----------
+  - name: gcr.io/cloud-builders/docker
+    id: build-api
+    args:
+      - build
+      - -t
+      - us-central1-docker.pkg.dev/$PROJECT_ID/suggestorder/api:$COMMIT_SHA
+      - apps/api
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-api
+    entrypoint: gcloud
+    waitFor: [build-api]
+    args:
+      - run
+      - deploy
+      - suggestorder-api
+      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/suggestorder/api:$COMMIT_SHA
+      - --region=us-central1
+      - --platform=managed
+      - --allow-unauthenticated
+      - --set-secrets=DATABASE_URL=DATABASE_URL:latest,REDIS_URL=REDIS_URL:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,STORE_API_KEY=STORE_API_KEY:latest,SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest
+      - --set-env-vars=CORS_ORIGINS=${_WEB_URL}
+      - --project=$PROJECT_ID
+
+  # ---------- Web ----------
+  - name: gcr.io/cloud-builders/docker
+    id: build-web
+    args:
+      - build
+      - -t
+      - us-central1-docker.pkg.dev/$PROJECT_ID/suggestorder/web:$COMMIT_SHA
+      - --build-arg
+      - NEXT_PUBLIC_API_URL=${_API_URL}
+      - apps/web
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: deploy-web
+    entrypoint: gcloud
+    waitFor: [build-web]
+    args:
+      - run
+      - deploy
+      - suggestorder-web
+      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/suggestorder/web:$COMMIT_SHA
+      - --region=us-central1
+      - --platform=managed
+      - --allow-unauthenticated
+      - --project=$PROJECT_ID
+
+images:
+  - us-central1-docker.pkg.dev/$PROJECT_ID/suggestorder/api:$COMMIT_SHA
+  - us-central1-docker.pkg.dev/$PROJECT_ID/suggestorder/web:$COMMIT_SHA
+
+# Override these in the Cloud Build trigger UI after first deploy
+substitutions:
+  _API_URL: https://suggestorder-api-REPLACE_ME.a.run.app
+  _WEB_URL: https://suggestorder-web-REPLACE_ME.a.run.app
+
+options:
+  logging: CLOUD_LOGGING_ONLY

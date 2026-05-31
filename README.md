@@ -285,6 +285,61 @@ Payment stub:
 - **Frontend 検証済**: `cd apps/web && npm run build` で型チェック・ビルドが
   通る状態（Next.js 16 Turbopack）。
 
+## Cloud Run デプロイ
+
+API と Web を Google Cloud Run にデプロイします。CI は Cloud Build（`cloudbuild.yaml`）。
+
+### 初回セットアップ
+
+```bash
+# 0. gcloud profile を有効化
+gcloud config configurations activate suggestorder-dev
+gcloud config list
+# account = yasumasa.takemura@cafkah.com
+# project = suggestorder-dev
+
+# 1. Artifact Registry リポジトリ作成
+gcloud artifacts repositories create suggestorder \
+  --repository-format=docker --location=us-central1 \
+  --project=suggestorder-dev
+
+# 2. Secret Manager にシークレット登録
+#    （DATABASE_URL, REDIS_URL, OPENAI_API_KEY, STORE_API_KEY,
+#      SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET）
+echo -n "postgresql+asyncpg://..." | \
+  gcloud secrets create DATABASE_URL --data-file=- --project=suggestorder-dev
+# 残りも同様
+
+# 3. API を一度手動デプロイして Cloud Run URL を取得
+gcloud run deploy suggestorder-api \
+  --image=us-central1-docker.pkg.dev/suggestorder-dev/suggestorder/api:latest \
+  --region=us-central1 --platform=managed --allow-unauthenticated \
+  --project=suggestorder-dev
+
+# 4. GCP コンソール → Cloud Build → トリガー で _API_URL / _WEB_URL を
+#    取得した *.run.app URL に更新する
+```
+
+### 手動ビルド & デプロイ
+
+```bash
+gcloud builds submit --config=cloudbuild.yaml \
+  --substitutions=_API_URL=https://suggestorder-api-xxx.a.run.app,_WEB_URL=https://suggestorder-web-xxx.a.run.app \
+  --project=suggestorder-dev
+```
+
+### 環境変数まとめ
+
+| サービス | 変数 | 渡し方 |
+|---------|------|--------|
+| API | `DATABASE_URL` / `REDIS_URL` / `OPENAI_API_KEY` / `STORE_API_KEY` / `SUPABASE_*` | Secret Manager |
+| API | `CORS_ORIGINS` | Cloud Build substitution `_WEB_URL` |
+| Web | `NEXT_PUBLIC_API_URL` | Docker build-arg（`_API_URL`） |
+
+Web の `NEXT_PUBLIC_API_URL` はビルド時に焼き込まれるため、API URL が変わったら Web の再ビルドが必要です。
+
+---
+
 ## Phase 2 以降のロードマップ
 
 | Phase | 内容 |
