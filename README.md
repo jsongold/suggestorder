@@ -287,17 +287,20 @@ Payment stub:
 
 ## Cloud Run デプロイ
 
-API と Web を Google Cloud Run にデプロイします。CI は Cloud Build（`cloudbuild.yaml`）。
+API と Web を Google Cloud Run にデプロイします。CI は GitHub Actions（`.github/workflows/deploy.yml`）で、`main` へのプッシュで自動実行されます。
+
+### 必要な GitHub Secrets
+
+| Secret | 内容 |
+|--------|------|
+| `WIF_PROVIDER` | Workload Identity Federation プロバイダ URI |
+| `WIF_SERVICE_ACCOUNT` | デプロイ用サービスアカウント |
+| `API_URL` | `https://suggestorder-api-xxx.a.run.app`（Web の build-arg 用） |
+| `WEB_URL` | `https://suggestorder-web-xxx.a.run.app`（API の CORS 設定用） |
 
 ### 初回セットアップ
 
 ```bash
-# 0. gcloud profile を有効化
-gcloud config configurations activate suggestorder-dev
-gcloud config list
-# account = yasumasa.takemura@cafkah.com
-# project = suggestorder-dev
-
 # 1. Artifact Registry リポジトリ作成
 gcloud artifacts repositories create suggestorder \
   --repository-format=docker --location=us-central1 \
@@ -310,21 +313,15 @@ echo -n "postgresql+asyncpg://..." | \
   gcloud secrets create DATABASE_URL --data-file=- --project=suggestorder-dev
 # 残りも同様
 
-# 3. API を一度手動デプロイして Cloud Run URL を取得
+# 3. Workload Identity Federation を設定し、GitHub Actions に keyless 認証を許可
+#    https://cloud.google.com/blog/products/identity-security/enabling-keyless-authentication-from-github-actions
+#    設定後、WIF_PROVIDER / WIF_SERVICE_ACCOUNT を GitHub Secrets に登録
+
+# 4. API を一度手動デプロイして Cloud Run URL を取得し、
+#    API_URL / WEB_URL を GitHub Secrets に登録する
 gcloud run deploy suggestorder-api \
   --image=us-central1-docker.pkg.dev/suggestorder-dev/suggestorder/api:latest \
   --region=us-central1 --platform=managed --allow-unauthenticated \
-  --project=suggestorder-dev
-
-# 4. GCP コンソール → Cloud Build → トリガー で _API_URL / _WEB_URL を
-#    取得した *.run.app URL に更新する
-```
-
-### 手動ビルド & デプロイ
-
-```bash
-gcloud builds submit --config=cloudbuild.yaml \
-  --substitutions=_API_URL=https://suggestorder-api-xxx.a.run.app,_WEB_URL=https://suggestorder-web-xxx.a.run.app \
   --project=suggestorder-dev
 ```
 
@@ -333,8 +330,8 @@ gcloud builds submit --config=cloudbuild.yaml \
 | サービス | 変数 | 渡し方 |
 |---------|------|--------|
 | API | `DATABASE_URL` / `REDIS_URL` / `OPENAI_API_KEY` / `STORE_API_KEY` / `SUPABASE_*` | Secret Manager |
-| API | `CORS_ORIGINS` | Cloud Build substitution `_WEB_URL` |
-| Web | `NEXT_PUBLIC_API_URL` | Docker build-arg（`_API_URL`） |
+| API | `CORS_ORIGINS` | GitHub Secret `WEB_URL` |
+| Web | `NEXT_PUBLIC_API_URL` | GitHub Secret `API_URL`（Docker build-arg） |
 
 Web の `NEXT_PUBLIC_API_URL` はビルド時に焼き込まれるため、API URL が変わったら Web の再ビルドが必要です。
 
