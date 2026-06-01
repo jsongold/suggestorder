@@ -47,6 +47,6 @@ jobs:
             --region=${{ env.REGION }} \
             --platform=managed \
             --allow-unauthenticated \
-            --set-secrets=DATABASE_URL=DATABASE_URL:latest,REDIS_URL=REDIS_URL:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,STORE_API_KEY=STORE_API_KEY:latest,SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest \
-            --set-env-vars=CORS_ORIGINS=${{ secrets.WEB_URL }} \
+            --set-secrets=DATABASE_URL=DATABASE_URL:latest,REDIS_URL=REDIS_URL:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest \
+            --set-env-vars=CORS_ORIGINS=https://suggestorder.vercel.app \
             --project=${{ env.PROJECT_ID }}

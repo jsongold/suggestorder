@@ -7,11 +7,6 @@ class Settings(BaseSettings):
     database_url: str
     redis_url: str
     openai_api_key: str
-    store_api_key: str
-
-    # Supabase — required in production, optional in local dev
-    supabase_url: str = ""
-    supabase_service_role_key: str = ""
     supabase_jwt_secret: str = ""
 
     model_config = {"env_file": ".env", "extra": "ignore"}

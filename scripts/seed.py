@@ -51,7 +51,6 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("OPENAI_API_KEY", "sk-seed-placeholder")
-os.environ.setdefault("STORE_API_KEY", "seed-placeholder")
 
 from sqlalchemy import text  # noqa: E402
 

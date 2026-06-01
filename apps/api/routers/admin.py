@@ -164,7 +164,7 @@ async def upload_photo(
     store_id: UUID = Depends(authenticate),
 ) -> dict:
     """Upload a product photo to Supabase Storage and return the public URL."""
-    from services.adapters.supabase_storage import upload_photo as _upload
+    from services.adapters.gcs_storage import upload_photo as _upload
 
     contents = await file.read()
     ext = ""
