@@ -30,7 +30,6 @@ jobs:
       TF_VAR_openai_api_key:             ${{ secrets.OPENAI_API_KEY }}
       TF_VAR_store_api_key:              ${{ secrets.STORE_API_KEY }}
       TF_VAR_supabase_url:               ${{ secrets.SUPABASE_URL }}
-      TF_VAR_supabase_service_role_key:  ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       TF_VAR_supabase_jwt_secret:        ${{ secrets.SUPABASE_JWT_SECRET }}
 
     steps:
