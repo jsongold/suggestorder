@@ -7,10 +7,6 @@ class Settings(BaseSettings):
     database_url: str
     redis_url: str
     openai_api_key: str
-    store_api_key: str
-
-    # Supabase — JWT verification in production, URL for web app
-    supabase_url: str = ""
     supabase_jwt_secret: str = ""
 
     model_config = {"env_file": ".env", "extra": "ignore"}

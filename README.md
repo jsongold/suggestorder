@@ -307,11 +307,15 @@ gcloud artifacts repositories create suggestorder \
   --project=suggestorder-dev
 
 # 2. Secret Manager にシークレット登録
-#    （DATABASE_URL, REDIS_URL, OPENAI_API_KEY, STORE_API_KEY,
-#      SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWT_SECRET）
-echo -n "postgresql+asyncpg://..." | \
-  gcloud secrets create DATABASE_URL --data-file=- --project=suggestorder-dev
-# 残りも同様
+echo "postgresql+asyncpg://..." | gcloud secrets create DATABASE_URL       --data-file=- --project=suggestorder-dev
+echo "redis://..."               | gcloud secrets create REDIS_URL          --data-file=- --project=suggestorder-dev
+echo "sk-..."                    | gcloud secrets create OPENAI_API_KEY     --data-file=- --project=suggestorder-dev
+echo "your-store-api-key"        | gcloud secrets create STORE_API_KEY      --data-file=- --project=suggestorder-dev
+echo "https://xxx.supabase.co"   | gcloud secrets create SUPABASE_URL       --data-file=- --project=suggestorder-dev
+echo "your-jwt-secret"           | gcloud secrets create SUPABASE_JWT_SECRET --data-file=- --project=suggestorder-dev
+
+# 既存シークレットを更新する場合は create → versions add に変える:
+# echo "new-value" | gcloud secrets versions add DATABASE_URL --data-file=-
 
 # 3. Workload Identity Federation を設定し、GitHub Actions に keyless 認証を許可
 #    https://cloud.google.com/blog/products/identity-security/enabling-keyless-authentication-from-github-actions
@@ -329,7 +333,7 @@ gcloud run deploy suggestorder-api \
 
 | サービス | 変数 | 渡し方 |
 |---------|------|--------|
-| API | `DATABASE_URL` / `REDIS_URL` / `OPENAI_API_KEY` / `STORE_API_KEY` / `SUPABASE_*` | Secret Manager |
+| API | `DATABASE_URL` / `REDIS_URL` / `OPENAI_API_KEY` / `STORE_API_KEY` / `SUPABASE_URL` / `SUPABASE_JWT_SECRET` | Secret Manager |
 | API | `CORS_ORIGINS` | GitHub Secret `WEB_URL` |
 | Web | `NEXT_PUBLIC_API_URL` | GitHub Secret `API_URL`（Docker build-arg） |
 
