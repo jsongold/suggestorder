@@ -285,6 +285,77 @@ Payment stub:
 - **Frontend 検証済**: `cd apps/web && npm run build` で型チェック・ビルドが
   通る状態（Next.js 16 Turbopack）。
 
+## Cloud Run デプロイ
+
+API と Web を Google Cloud Run にデプロイします。CI は GitHub Actions で、ワークフローはサービス別に分割されています。ブランチ名でトリガー対象が決まります（`CLAUDE.md` のブランチ命名規則と対応）:
+
+| ワークフロー | トリガーブランチ | デプロイ対象 |
+|-------------|----------------|-------------|
+| `.github/workflows/deploy-api.yml` | `main`, `feat/api*` | API（`suggestorder-api`） |
+| `.github/workflows/deploy-web.yml` | `main`, `feat/web*` | Web（`suggestorder-web`） |
+
+`main` への push は両方、`feat/api-*` は API のみ、`feat/web-*` は Web のみデプロイします。
+
+### 認証モデル
+
+- **API は非公開**（`--no-allow-unauthenticated`）。ブラウザから直接叩けません。
+- ブラウザ → Web の同一オリジン proxy（`apps/web/app/api/gcp/[...path]/route.ts`）→ Cloud Run、という経路で中継します。proxy は Google ID トークンを mint して `Authorization` に載せ、Supabase ユーザ JWT は `X-User-Authorization` で転送します（`lib/gcpAuth.ts` / `lib/proxyHeaders.ts`）。
+- ID トークンの mint 方法は `GCP_AUTH_MODE` で選択（未指定時は自動判定）:
+  - `vercel-oidc`: Vercel OIDC → Workload Identity Federation → SA インパーソネート（Vercel 上で動く場合）
+  - `adc`: Application Default Credentials（Cloud Run / GCE のランタイム SA）。SA に `roles/run.invoker` が必要
+
+### 必要な GitHub Secrets
+
+| Secret | 内容 |
+|--------|------|
+| `WIF_PROVIDER` | Workload Identity Federation プロバイダ URI |
+| `WIF_SERVICE_ACCOUNT` | デプロイ用サービスアカウント |
+| `API_URL` | `https://suggestorder-api-xxx.a.run.app`（Web の build-arg 用） |
+
+### 初回セットアップ
+
+```bash
+# 1. Artifact Registry リポジトリ作成
+gcloud artifacts repositories create suggestorder \
+  --repository-format=docker --location=us-central1 \
+  --project=suggestorder-dev
+
+# 2. Secret Manager にシークレット登録（deploy-api.yml が mount する 4 つ）
+echo "postgresql+asyncpg://..." | gcloud secrets create DATABASE_URL        --data-file=- --project=suggestorder-dev
+echo "redis://..."               | gcloud secrets create REDIS_URL           --data-file=- --project=suggestorder-dev
+echo "sk-..."                    | gcloud secrets create OPENAI_API_KEY      --data-file=- --project=suggestorder-dev
+echo "your-jwt-secret"           | gcloud secrets create SUPABASE_JWT_SECRET --data-file=- --project=suggestorder-dev
+
+# 既存シークレットを更新する場合は create → versions add に変える:
+# echo "new-value" | gcloud secrets versions add DATABASE_URL --data-file=-
+
+# 3. Workload Identity Federation を設定し、GitHub Actions に keyless 認証を許可
+#    https://cloud.google.com/blog/products/identity-security/enabling-keyless-authentication-from-github-actions
+#    設定後、WIF_PROVIDER / WIF_SERVICE_ACCOUNT を GitHub Secrets に登録
+
+# 4. API を一度手動デプロイして Cloud Run URL を取得し、API_URL を GitHub Secrets に登録する
+#    （本番は --no-allow-unauthenticated。Web proxy / 呼び出し元 SA に roles/run.invoker が必要）
+gcloud run deploy suggestorder-api \
+  --image=us-central1-docker.pkg.dev/suggestorder-dev/suggestorder/api:latest \
+  --region=us-central1 --platform=managed --port=8080 --no-allow-unauthenticated \
+  --project=suggestorder-dev
+```
+
+### 環境変数まとめ
+
+| サービス | 変数 | 渡し方 |
+|---------|------|--------|
+| API | `DATABASE_URL` / `REDIS_URL` / `OPENAI_API_KEY` / `SUPABASE_JWT_SECRET` | Secret Manager |
+| API | `CORS_ORIGINS`（例: `https://suggestorder.vercel.app`） | `deploy-api.yml` の `--set-env-vars` |
+| Web | `NEXT_PUBLIC_API_URL`（proxy 経由なら `/api/gcp`） | Docker build-arg（GitHub Secret `API_URL`） |
+| Web | `CLOUD_RUN_API_URL` | proxy が中継する実 API URL（ランタイム env） |
+| Web | `GCP_AUTH_MODE` / `GCP_*`（OIDC 用） | ランタイム env（Vercel OIDC 経路で使用） |
+
+- API はコンテナ・Cloud Run ともに **port 8080**（`apps/api/Dockerfile`）。
+- Web の `NEXT_PUBLIC_API_URL` はビルド時に焼き込まれます。proxy 方式（`/api/gcp`）なら API URL が変わっても再ビルド不要で、`CLOUD_RUN_API_URL` だけ更新すれば済みます。
+
+---
+
 ## Phase 2 以降のロードマップ
 
 | Phase | 内容 |
